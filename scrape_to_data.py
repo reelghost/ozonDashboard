@@ -46,6 +46,56 @@ def load_cookies_from_txt(file_path : str):
                 cookies_dict[cookie_name] = cookie_value
     return cookies_dict
 
+def get_prod_list(company_id):
+    url = "https://seller.ozon.ru/api/product/list"
+    payload_data = {
+        "fields": [5, 2, 4, 3, 6, 11, 13, 1, 7, 16, 19, 17, 20],
+        "search":"",
+        "visibility": 15,
+        "sort_by": "created_at",
+        "sort_dir": "DESC",
+        "description_category_and_type_id": [],
+        "company_id": int(company_id),
+        "model_id": [],
+        "is_es_search": True,
+        "image_absent": False,
+        "page": 1,
+        "page_size": 50,
+        "from": 0,
+        "limit": 50,
+        "last_id": ""
+    }
+
+    cookies = load_cookies_from_txt(f'cookies/{company_id}.txt')
+    headers = {
+        "x-o3-company-id": company_id,
+    }
+
+    # Send request with cookies
+    resp = requests.post(url, json=payload_data, headers=headers, cookies=cookies)
+    resp_data = resp.json()['items']
+    # the first object
+    prod_dict = {}
+    date = datetime.now().strftime('%Y-%m-%d')
+    prod_list = []
+    for resp_d in resp_data:
+        sellerId = resp_d['offer_id']
+        price = resp_d['price'].get('marketing_price')
+        in_ozon = resp_d['stock']['present']
+        image = resp_d['pictures'][0]['url']
+        data = {
+            "sellerId": sellerId,
+            "price": price,
+            "in_ozon": in_ozon,
+            "image": image,
+        }
+        prod_list.append(data)
+    # Assign the list to the date key in the dictionary
+    prod_dict[date] = prod_list
+    # insert to db
+    if prod_list:
+        insert_to_db(coll=f"{company_id}_prods", data=prod_dict)
+    return prod_dict
 
 def get_analytics(company_id : str, date_=datetime.now().strftime('%Y-%m-%d')):
     """
@@ -92,5 +142,7 @@ yesterday = datetime.now() - timedelta(days=1)
 yesterday = yesterday.strftime('%Y-%m-%d')
 
 if __name__ == "__main__":
+    # gets data for yesterday
     for store in [STORE_1, STORE_2, STORE_3]:
         results = get_analytics(company_id=store, date_=yesterday)
+        get_prod_list(company_id=store) # Gets the product list n todays date

@@ -1,3 +1,5 @@
 cookies
 venv
 .env
+prod_list.py
+__pycache__

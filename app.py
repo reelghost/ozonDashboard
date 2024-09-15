@@ -30,17 +30,30 @@ def fetch_data(date, collection):
             results = entry['result']['data']
             
             # Prepare headers
-            headers = [' '] + metrics
+            headers = [' '] + ["image"] + metrics + ['in_ozon', 'price']
             
             # Add totals row with 'Totals' as the first value
-            totals_row = ['Totals'] + totals
+            totals_row = ['Totals', ' '] + totals
             formatted_data.append(totals_row)
 
             # Add each product's data
             for item in results:
                 dimensions = item['dimensions'][0]  # Assuming there's only one dimension per result
                 metrics_values = item['metrics']
-                row = [dimensions.get('sellerId')] + metrics_values
+                # we use aggregate to find the matching records
+                pipeline = [
+                    # Match the document containing the specified date
+                    { '$match': { f'{date}': { '$exists': True } } },
+                    # Unwind the array for the given date
+                    { '$unwind': f'${date}' },
+                    # Match the sellerId within the unwound array
+                    { '$match': { f'{date}.sellerId': dimensions.get('sellerId') } }
+                ]
+                prod_data = list(db[f"{collection}_prods"].aggregate(pipeline))
+                in_ozon = prod_data[0][f'{date}'].get('in_ozon') if prod_data else None
+                price = prod_data[0][f'{date}'].get('price') if prod_data else None
+                image = prod_data[0][f'{date}'].get('image') if prod_data else None
+                row = [dimensions.get('sellerId')] + [image] + metrics_values + [in_ozon, price]
                 formatted_data.append(row)
             
         # Convert to DataFrame
@@ -89,6 +102,7 @@ def fetch_all_data(collection):
     df = pd.DataFrame(flattened_data)
     sorted_df = df.sort_index(axis=1, ascending=False)
 
+
     return sorted_df
 
 def get_store_name(collection_name):
@@ -106,7 +120,10 @@ load_dotenv()
 # MongoDB connection
 client = MongoClient(os.getenv('DB_URI'))
 db = client['ozon']
-collections = db.list_collection_names()
+all_collections = db.list_collection_names()
+# Filter collections that do not contain an underscore '_'
+collections = [collection for collection in all_collections if '_' not in collection]
+
 # save in a dict fr easier menu access
 collection_dict = {collection: get_store_name(collection) for collection in collections}
 
@@ -141,7 +158,11 @@ if selected == "Data":
         
         if not data[0].empty:
             st.write(f"Data for :violet[{date_input}] Total products: {data[1]}")
-            st.dataframe(data[0], hide_index=True)  # Display data as a table
+            # display the images too
+            st.dataframe(data[0],column_config={
+                "image": st.column_config.ImageColumn(
+                    "Images", help="Duble click to preview"
+                )}, hide_index=True)  # Display data as a table
         else:
             st.write(f"No data found for {date_input}")
 elif selected == 'Ordered Analytics':
