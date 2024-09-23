@@ -145,4 +145,5 @@ if __name__ == "__main__":
     # gets data for yesterday
     for store in [STORE_1, STORE_2, STORE_3]:
         results = get_analytics(company_id=store, date_=yesterday)
+        print("[PROD]Getting the products list...")
         get_prod_list(company_id=store) # Gets the product list n todays date

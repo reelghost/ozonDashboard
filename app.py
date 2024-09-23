@@ -105,6 +105,102 @@ def fetch_all_data(collection):
 
     return sorted_df
 
+
+def fetch_prod_analytics(collection):
+    '''
+    Fetches all the data from the given collection and returns it as a DataFrame
+    '''
+    cursor = db[f"{collection}_prods"].find()
+    datas = list(cursor)
+    print(len(datas))
+
+    # Define metrics for the table
+    metrics = [
+        'Date',
+        'Products ordered',
+        'Unique visitors, total',
+        'Unique visitors with PDP view',
+        'Shopping cart conversion rate from a PDP',
+        'Position in search and catalog',
+        'online price',
+        'In Ozon warehouse'
+    ]
+
+    full_values = []
+    columns = None  # Initialize outside loop to ensure it's only set once
+
+    for data in datas:
+        # Extract date key dynamically
+        date_key = [key for key in data.keys() if key != '_id'][0]
+        print(f"Processing date: {date_key}")
+
+        # Extract sellers from any date
+        sellers_data = data[date_key]
+        sellers = [item['sellerId'] for item in sellers_data]
+
+        # Create a MultiIndex header if it's not created already
+        if columns is None:
+            columns = pd.MultiIndex.from_tuples([(seller, metric) for seller in sellers for metric in metrics])
+
+        # Dynamic generation of data values for each seller
+        
+
+        row_data = []
+        for seller in sellers_data:
+            # we use aggregate to find the matching records
+            pipeline = [
+                {
+                    "$match": {
+                        "query.dateFrom": f"{date_key} 00:00:00",
+                        "result.data.dimensions.sellerId": seller['sellerId']
+                    }
+                },
+                {
+                    "$unwind": "$result.data"  # Deconstructs the result.data array
+                },
+                {
+                    "$unwind": "$result.data.dimensions"  # Deconstructs the dimensions array within result.data
+                },
+                {
+                    "$match": {
+                        "result.data.dimensions.sellerId": seller['sellerId']
+                    }
+                },
+                {
+                    "$project": {
+                        "_id": 0,  # Exclude _id field
+                        "metrics": "$result.data.metrics"  # Include only metrics field
+                    }
+                }
+            ]
+            prod_datas = list(db[f"{collection}"].aggregate(pipeline))
+            
+            prod_ord = prod_datas[0]['metrics'][0] if prod_datas else None
+            uniq_vis = prod_datas[0]['metrics'][1] if prod_datas else None
+            uniq_vis_pdp = prod_datas[0]['metrics'][2] if prod_datas else None
+            shop_cart = prod_datas[0]['metrics'][3] if prod_datas else None
+            pos_ = prod_datas[0]['metrics'][7] if prod_datas else None
+            seller_metrics = [
+                date_key,        # Date
+                prod_ord,              # Products ordered (can be changed dynamically)
+                uniq_vis,           # Unique visitors, total (example)
+                uniq_vis_pdp,             # Unique visitors with PDP view (example)
+                shop_cart,         # Shopping cart conversion rate from a PDP
+                pos_,              # Position in search and catalog (example)
+                seller['price'], # online price from the data
+                seller['in_ozon']# In Ozon warehouse from the data
+            ]
+            row_data.extend(seller_metrics)  # Add this seller's data to the row
+
+        full_values.append(row_data)  # Add the row data to full_values
+
+    # Create the DataFrame
+    df = pd.DataFrame(full_values, columns=columns)
+
+    # Display the DataFrame
+    return df
+
+
 def get_store_name(collection_name):
     '''Maps collection name to store name'''
     if collection_name == '1742699':
@@ -173,4 +269,5 @@ elif selected == 'Ordered Analytics':
     data = fetch_all_data(collection=str(selected_collection))
     st.dataframe(data, hide_index=False)
 else:
-    st.write(f"coming soon...")
+    prod_data = fetch_prod_analytics(collection=selected_collection)
+    st.dataframe(data=prod_data)
