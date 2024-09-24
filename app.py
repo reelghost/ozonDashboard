@@ -80,7 +80,10 @@ def fetch_all_data(collection):
         # Store the totals data with date and product ID as keys
         data_by_date_and_product['Products Ordered'][date_from] = totals[0]
         data_by_date_and_product['TotalRevenue'][date_from] = totals[4]
-        data_by_date_and_product['AveragePrice'][date_from] = int(totals[4]/totals[0])
+        try:
+            data_by_date_and_product['AveragePrice'][date_from] = int(totals[4]/totals[0])
+        except ZeroDivisionError:
+            data_by_date_and_product['AveragePrice'][date_from] = 0
         data_by_date_and_product['Cancelled'][date_from] = totals[5]
         # Process the product data
         for item in document['result']['data']:
