@@ -3,3 +3,4 @@ venv
 .env
 prod_list.py
 __pycache__
+.streamlit/secrets.toml

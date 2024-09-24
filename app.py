@@ -214,7 +214,8 @@ def get_store_name(collection_name):
 
 load_dotenv()
 # MongoDB connection
-client = MongoClient(os.getenv('DB_URI'))
+# client = MongoClient(os.getenv('DB_URI'))
+client = MongoClient(st.secrets['DB_URI'])
 db = client['ozon']
 all_collections = db.list_collection_names()
 # Filter collections that do not contain an underscore '_'
