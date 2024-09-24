@@ -128,6 +128,7 @@ def fetch_prod_analytics(collection):
 
     full_values = []
     columns = None  # Initialize outside loop to ensure it's only set once
+    num_metrics_per_seller = 8  # Define the expected number of metrics per seller
 
     for data in datas:
         # Extract date key dynamically
@@ -142,12 +143,9 @@ def fetch_prod_analytics(collection):
         if columns is None:
             columns = pd.MultiIndex.from_tuples([(seller, metric) for seller in sellers for metric in metrics])
 
-        # Dynamic generation of data values for each seller
-        
-
         row_data = []
         for seller in sellers_data:
-            # we use aggregate to find the matching records
+            # MongoDB aggregation pipeline
             pipeline = [
                 {
                     "$match": {
@@ -174,25 +172,41 @@ def fetch_prod_analytics(collection):
                 }
             ]
             prod_datas = list(db[f"{collection}"].aggregate(pipeline))
-            
+
+            # Extracting metrics (assuming 8 metrics per seller)
             prod_ord = prod_datas[0]['metrics'][0] if prod_datas else None
             uniq_vis = prod_datas[0]['metrics'][1] if prod_datas else None
             uniq_vis_pdp = prod_datas[0]['metrics'][2] if prod_datas else None
             shop_cart = prod_datas[0]['metrics'][3] if prod_datas else None
             pos_ = prod_datas[0]['metrics'][7] if prod_datas else None
+            
             seller_metrics = [
                 date_key,        # Date
-                prod_ord,              # Products ordered (can be changed dynamically)
-                uniq_vis,           # Unique visitors, total (example)
-                uniq_vis_pdp,             # Unique visitors with PDP view (example)
-                shop_cart,         # Shopping cart conversion rate from a PDP
-                pos_,              # Position in search and catalog (example)
+                prod_ord,        # Products ordered (can be changed dynamically)
+                uniq_vis,        # Unique visitors, total
+                uniq_vis_pdp,    # Unique visitors with PDP view
+                shop_cart,       # Shopping cart conversion rate from a PDP
+                pos_,            # Position in search and catalog
                 seller['price'], # online price from the data
                 seller['in_ozon']# In Ozon warehouse from the data
             ]
+
             row_data.extend(seller_metrics)  # Add this seller's data to the row
 
-        full_values.append(row_data)  # Add the row data to full_values
+        # Adjust the row data to match the number of columns
+        expected_columns = len(columns)
+        actual_columns = len(row_data)
+
+        if actual_columns < expected_columns:
+            # Add None for missing columns
+            row_data.extend([None] * (expected_columns - actual_columns))
+        elif actual_columns > expected_columns:
+            # Truncate extra columns
+            row_data = row_data[:expected_columns]
+
+        # Add corrected row data to full_values
+        full_values.append(row_data)
+
 
     # Create the DataFrame
     df = pd.DataFrame(full_values, columns=columns)
